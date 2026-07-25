@@ -4,6 +4,9 @@
 #include <unistd.h>
 
 #define MAX_INPUT 1024
+#define MAX_ARGS 64
+#define DELIMITER " "
+
 /*
  * @brief Function writes current directory into buffer
  * */
@@ -15,7 +18,27 @@ char *get_cwd(char *buf, size_t bufsize) {
   return buf;
 }
 
-int parse_args() { return 0; }
+/*
+ * @brief Parsing arguments from line
+ *
+ * @note Free the array before freeing the line
+ * */
+char **parse_args(char *line) {
+  char **tokens = malloc(MAX_ARGS * sizeof(*tokens));
+  unsigned int position = 0;
+
+  char *token = strtok(line, DELIMITER);
+
+  while (token != NULL) {
+    token =
+        strtok(NULL, DELIMITER); // NULL because we work with the same string
+    tokens[position++] = token;
+  }
+
+  tokens[position] = NULL; // terminating execvp
+
+  return tokens;
+}
 
 /*
  * @brief Function to take input from user
@@ -31,7 +54,7 @@ char *shell_input(void) {
     snprintf(cwd, sizeof(cwd), "?");
   }
   printf("%s $> ", cwd);
-  fflush(stdout); // Reset buffer
+  fflush(stdout); // Flushing buffer
 
   if (getline(&buf, &bufsize, stdin) == -1) {
     free(buf);
@@ -50,6 +73,13 @@ char *shell_input(void) {
 
 int main(void) {
   char *line = shell_input();
+  if (line == NULL) {
+    return 0;
+  }
 
+  char **args = parse_args(line);
+
+  // First args, then line because args is array of pointers to line
+  free(args);
   free(line);
 }
