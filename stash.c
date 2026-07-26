@@ -8,6 +8,28 @@
 #define DELIMITER " "
 
 /*
+ * @brief Functon handling builtin commands like cd or exit
+ * */
+int execute_command(char **args) {
+  if (args == NULL || args[0] == NULL) {
+    return 0;
+  }
+
+  if (strcmp(args[0], "exit") == 0) {
+    return 1;
+  } else if (strcmp(args[0], "cd") == 0) {
+    const char *dir = (args[1] == NULL) ? getenv("HOME") : args[1];
+
+    if (chdir(dir) != 0) {
+      perror("cd: No such file or directory");
+    }
+  } else {
+    // TODO: execute other command
+  }
+  return 0;
+}
+
+/*
  * @brief Function writes current directory into buffer
  * */
 char *get_cwd(char *buf, size_t bufsize) {
