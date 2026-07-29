@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #define MAX_INPUT 1024
@@ -20,11 +22,33 @@ int execute_command(char **args) {
   } else if (strcmp(args[0], "cd") == 0) {
     const char *dir = (args[1] == NULL) ? getenv("HOME") : args[1];
 
+    if (dir == NULL) {
+      fprintf(stderr, "HOME directory not set\n");
+      return 0;
+    }
+
     if (chdir(dir) != 0) {
-      perror("cd: No such file or directory");
+      perror("cd");
     }
   } else {
-    // TODO: execute other command
+    pid_t pid;
+    int status;
+
+    pid = fork();
+    if (pid < 0) {
+      perror("fork");
+      return 0;
+    }
+
+    if (pid == 0) {
+      printf("DEBUG: args[0] = '%s'\n", args[0]);
+      if (execvp(args[0], args) == -1) {
+        perror("child process");
+        exit(EXIT_FAILURE);
+      }
+    } else {
+      waitpid(pid, &status, 0);
+    }
   }
   return 0;
 }
@@ -34,7 +58,7 @@ int execute_command(char **args) {
  * */
 char *get_cwd(char *buf, size_t bufsize) {
   if (getcwd(buf, bufsize) == NULL) {
-    perror("Error occured while getcwd");
+    perror("getcwd");
     return NULL;
   }
   return buf;
@@ -52,9 +76,9 @@ char **parse_args(char *line) {
   char *token = strtok(line, DELIMITER);
 
   while (token != NULL) {
+    tokens[position++] = token;
     token =
         strtok(NULL, DELIMITER); // NULL because we work with the same string
-    tokens[position++] = token;
   }
 
   tokens[position] = NULL; // terminating execvp
@@ -94,14 +118,34 @@ char *shell_input(void) {
 }
 
 int main(void) {
-  char *line = shell_input();
-  if (line == NULL) {
-    return 0;
+  char *line;
+  char **args;
+  int status = 0;
+
+  while (1) {
+    line = shell_input();
+
+    if (line == NULL) {
+      printf("\n");
+      break;
+    }
+    if (strlen(line) == 0) {
+      free(line);
+      continue;
+    }
+
+    args = parse_args(line);
+
+    status = execute_command(args);
+
+    free(args);
+    free(line);
+
+    if (status == 1) {
+      break;
+    }
   }
-
-  char **args = parse_args(line);
-
   // First args, then line because args is array of pointers to line
-  free(args);
-  free(line);
+
+  return 0;
 }
