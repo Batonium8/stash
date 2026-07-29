@@ -41,7 +41,6 @@ int execute_command(char **args) {
     }
 
     if (pid == 0) {
-      printf("DEBUG: args[0] = '%s'\n", args[0]);
       if (execvp(args[0], args) == -1) {
         perror("child process");
         exit(EXIT_FAILURE);
