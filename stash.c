@@ -5,6 +5,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "command.h"
+
 #define MAX_INPUT 1024
 #define MAX_ARGS 64
 #define DELIMITER " "
