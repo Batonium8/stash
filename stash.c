@@ -7,14 +7,10 @@
 
 #include "command.h"
 
-#define MAX_INPUT 1024
-#define MAX_ARGS 64
-#define DELIMITER " "
-
 /*
  * @brief Functon handling builtin commands like cd or exit
  * */
-int execute_command(char **args) {
+static int execute_command(char **args) {
   if (args == NULL || args[0] == NULL) {
     return 0;
   }
@@ -57,7 +53,7 @@ int execute_command(char **args) {
 /*
  * @brief Function writes current directory into buffer
  * */
-char *get_cwd(char *buf, size_t bufsize) {
+static char *get_cwd(char *buf, size_t bufsize) {
   if (getcwd(buf, bufsize) == NULL) {
     perror("getcwd");
     return NULL;
