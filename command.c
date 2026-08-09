@@ -5,7 +5,7 @@
 #include <string.h>
 
 /*
- *
+ * Function to split line in tokens using strsep()
  *
  * */
 
@@ -20,9 +20,11 @@ char **tokenize(char *line, int *num_tokens) {
   char *token;
   char *cursor = line;
   while ((token = strsep(&cursor, DELIMITER)) != NULL) {
+    // skip if first char of token is end of line (whitespace)
     if (*token == '\0') {
       continue;
     }
+    // TODO: rewrite to realloc
     if (position >= MAX_ARGS - 1) {
       fprintf(stderr, "error: too many arguments\n");
       free(tokens);
@@ -38,12 +40,21 @@ char **tokenize(char *line, int *num_tokens) {
 
   return tokens;
 }
-
+/*
+ * Function to parse tokens array in Command structure
+ *
+ * @note Because of using strdup Command structure now owns
+ *  strings and calling function need to free memory
+ */
 Command *parse_tokens(char **tokens, int num_tokens) {
+  if (tokens == NULL) {
+    return NULL;
+  }
   if (num_tokens <= 0) {
     fprintf(stderr, "error: empty command\n");
     return NULL;
   }
+
   Command *command = malloc(sizeof(Command));
   if (command == NULL) {
     perror("malloc");
@@ -65,50 +76,82 @@ Command *parse_tokens(char **tokens, int num_tokens) {
   int i = 0;
   while (i < num_tokens) {
     if (strcmp(tokens[i], ">") == 0) {
+      // Check if file exists after redirect
       if (i + 1 < num_tokens) {
-        command->outfile = tokens[i + 1];
+        // If multiple redirects of the same type: last one wins
+        // Free previous to avoid memory leak
+        if (command->outfile != NULL) {
+          free(command->outfile);
+        }
+        command->outfile = strdup(tokens[i + 1]);
+        if (command->outfile == NULL) {
+          perror("strdup");
+          goto cleanup;
+        }
         i += 2; // skip filename
       } else {
         fprintf(stderr, "error: no file after redirect\n");
-        free(command->argv);
-        free(command);
-        return NULL;
+        goto cleanup;
       }
     } else if (strcmp(tokens[i], "<") == 0) {
       if (i + 1 < num_tokens) {
-        command->infile = tokens[i + 1];
+        if (command->infile != NULL) {
+          free(command->infile);
+        }
+        command->infile = strdup(tokens[i + 1]);
+        if (command->infile == NULL) {
+          perror("strdup");
+          goto cleanup;
+        }
         i += 2; // skip filename
       } else {
         fprintf(stderr, "error: no file after redirect\n");
-        free(command->argv);
-        free(command);
-        return NULL;
+        goto cleanup;
       }
     } else if (strcmp(tokens[i], ">>") == 0) {
       if (i + 1 < num_tokens) {
-        command->outfile = tokens[i + 1];
+        if (command->outfile != NULL) {
+          free(command->outfile);
+        }
+        command->outfile = strdup(tokens[i + 1]);
+        if (command->outfile == NULL) {
+          perror("strdup");
+          goto cleanup;
+        }
         command->append = 1;
         i += 2; // skip filename
       } else {
         fprintf(stderr, "error: no file after redirect\n");
-        free(command->argv);
-        free(command);
-        return NULL;
+        goto cleanup;
       }
     } else {
       if (argc == MAX_ARGS - 1) { // last for null terminator
         fprintf(stderr, "error: too many arguments\n");
-        free(command->argv);
-        free(command);
-        return NULL;
+        goto cleanup;
       }
-      command->argv[argc++] = tokens[i];
+      command->argv[argc] = strdup(tokens[i]);
+      if (command->argv[argc] == NULL) {
+        perror("strdup");
+        goto cleanup;
+      }
+      argc++;
       i++;
     }
   }
   command->argv[argc] = NULL; // terminator
 
   return command;
+
+cleanup:
+  for (int i = 0; i < argc; i++) {
+    free(command->argv[i]);
+  }
+  free(command->infile);
+  free(command->outfile);
+  free(command->argv);
+  free(command);
+
+  return NULL;
 }
 
 Command *parse_pipeline(char *line) {
