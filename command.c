@@ -15,13 +15,22 @@ char **tokenize(char *line, int *num_tokens) {
     perror("malloc");
     return NULL;
   }
-  unsigned int position = 0;
+  size_t position = 0;
 
-  char *token = strtok(line, DELIMITER);
+  char *token;
+  char *cursor = line;
+  while ((token = strsep(&cursor, DELIMITER)) != NULL) {
+    if (*token == '\0') {
+      continue;
+    }
+    if (position >= MAX_ARGS - 1) {
+      fprintf(stderr, "error: too many arguments\n");
+      free(tokens);
+      *num_tokens = 0;
+      return NULL;
+    }
 
-  while (token != NULL) {
     tokens[position++] = token;
-    token = strtok(NULL, DELIMITER);
   }
   tokens[position] = NULL;
 
@@ -33,6 +42,7 @@ char **tokenize(char *line, int *num_tokens) {
 Command *parse_tokens(char **tokens, int num_tokens) {
   if (num_tokens <= 0) {
     fprintf(stderr, "error: empty command\n");
+    return NULL;
   }
   Command *command = malloc(sizeof(Command));
   if (command == NULL) {
