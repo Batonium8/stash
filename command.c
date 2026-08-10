@@ -177,6 +177,12 @@ Command *parse_pipeline(char *line) {
     }
 
     char **tokens = tokenize(curr_str, &num_tokens);
+
+    if (tokens == NULL) {
+      free_pipeline(head);
+      return NULL;
+    }
+
     Command *command = parse_tokens(tokens, num_tokens);
 
     free(tokens);
@@ -195,8 +201,6 @@ Command *parse_pipeline(char *line) {
     }
 
     curr_str = next_str;
-    if (next_str == NULL)
-      break;
   }
   return head;
 }
@@ -204,7 +208,12 @@ Command *parse_pipeline(char *line) {
 void free_pipeline(Command *head) {
   while (head != NULL) {
     Command *next = head->next;
+    for (int i = 0; head->argv[i] != NULL; i++) {
+      free(head->argv[i]);
+    }
     free(head->argv);
+    free(head->infile);
+    free(head->outfile);
     free(head);
     head = next;
   }
