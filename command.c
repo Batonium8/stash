@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 /*
  * Function to split line in tokens using strsep()
@@ -204,6 +205,32 @@ Command *parse_pipeline(char *line) {
   }
   return head;
 }
+
+static int execute_builtin(Command *head) {
+  if (head == NULL || head->argv[0] == NULL) {
+    return 0;
+  }
+
+  if (strcmp(head->argv[0], "cd") == 0) {
+    const char *dir = (head->argv[1] == NULL) ? getenv("HOME") : head->argv[1];
+
+    if (dir == NULL) {
+      fprintf(stderr, "HOME directory not set\n");
+      return 0;
+    }
+
+    if (chdir(dir) != 0) {
+      perror("cd");
+      return 0;
+    }
+  } else if (strcmp(head->argv[0], "exit") == 0) {
+    return 1;
+  }
+
+  return 0;
+}
+
+int execute_pipeline(Command *head) { return 0; }
 
 void free_pipeline(Command *head) {
   while (head != NULL) {
