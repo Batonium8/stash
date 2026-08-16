@@ -1,11 +1,11 @@
 #include "command.h"
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
-
 /*
  * Function to split line in tokens using strsep()
  *
@@ -257,12 +257,43 @@ int execute_command(Command *head) {
   }
 
   if (pid == 0) {
+
+    if (head->infile != NULL) {
+      int file = open(head->infile, O_RDONLY);
+      if (file == -1) {
+        perror(head->infile);
+        exit(EXIT_FAILURE);
+      }
+      dup2(file, STDIN_FILENO);
+      close(file);
+    }
+
+    if (head->outfile != NULL) {
+      int flags = O_WRONLY | O_CREAT;
+      if (head->append) {
+        flags |= O_APPEND;
+      } else {
+        flags |= O_TRUNC;
+      }
+      int file =
+          open(head->outfile, flags, 0644); // 0644 - default file permissions
+      if (file == -1) {
+        perror(head->outfile);
+        exit(EXIT_FAILURE);
+      }
+      dup2(file, STDOUT_FILENO);
+      close(file);
+    }
+
     if (execvp(head->argv[0], head->argv) == -1) {
       perror("child process");
       exit(EXIT_FAILURE);
     }
   } else {
     waitpid(pid, &status, 0);
+    if (WIFEXITED(status)) {
+      return WEXITSTATUS(status);
+    }
   }
   return 0;
 }
