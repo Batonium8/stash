@@ -21,6 +21,8 @@ Command *parse_pipeline(char *line);
 
 static int execute_builtin(Command *head);
 
+int execute_command(Command *head);
+
 int execute_pipeline(Command *head);
 
 void free_pipeline(Command *head);

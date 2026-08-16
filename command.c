@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 /*
@@ -212,6 +213,10 @@ static int execute_builtin(Command *head) {
   }
 
   if (strcmp(head->argv[0], "cd") == 0) {
+    if (head->argv[2] != NULL) {
+      fprintf(stderr, "cd: too many arguments\n");
+      return 0;
+    }
     const char *dir = (head->argv[1] == NULL) ? getenv("HOME") : head->argv[1];
 
     if (dir == NULL) {
@@ -224,9 +229,41 @@ static int execute_builtin(Command *head) {
       return 0;
     }
   } else if (strcmp(head->argv[0], "exit") == 0) {
-    return 1;
+    return -2; // exit code
   }
 
+  return -1; // not builtin command
+}
+
+int execute_command(Command *head) {
+  if (head == NULL || head->argv[0] == NULL) {
+    return 0;
+  }
+
+  int exit_code = execute_builtin(head);
+  // @note dont forget that -2 should end main loop
+  if (exit_code != -1) {
+    return exit_code;
+  }
+
+  pid_t pid;
+  int status;
+
+  pid = fork();
+
+  if (pid < 0) {
+    perror("fork");
+    return 0;
+  }
+
+  if (pid == 0) {
+    if (execvp(head->argv[0], head->argv) == -1) {
+      perror("child process");
+      exit(EXIT_FAILURE);
+    }
+  } else {
+    waitpid(pid, &status, 0);
+  }
   return 0;
 }
 
