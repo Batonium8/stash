@@ -4,6 +4,8 @@
 #define MAX_INPUT 1024
 #define MAX_ARGS 64
 #define DELIMITER " "
+#define BUILTIN_NOT_FOUND -1
+#define SHELL_EXIT -2
 
 typedef struct command {
   char **argv;
@@ -13,15 +15,7 @@ typedef struct command {
   struct command *next;
 } Command;
 
-char **tokenize(char *line, int *num_tokens);
-
-Command *parse_tokens(char **tokens, int num_tokens);
-
 Command *parse_pipeline(char *line);
-
-static int execute_builtin(Command *head);
-
-int execute_command(Command *head);
 
 int execute_pipeline(Command *head);
 

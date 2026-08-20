@@ -8,49 +8,6 @@
 #include "command.h"
 
 /*
- * @brief Functon handling builtin commands like cd or exit
- * */
-static int execute_command(char **args) {
-  if (args == NULL || args[0] == NULL) {
-    return 0;
-  }
-
-  if (strcmp(args[0], "exit") == 0) {
-    return 1;
-  } else if (strcmp(args[0], "cd") == 0) {
-    const char *dir = (args[1] == NULL) ? getenv("HOME") : args[1];
-
-    if (dir == NULL) {
-      fprintf(stderr, "HOME directory not set\n");
-      return 0;
-    }
-
-    if (chdir(dir) != 0) {
-      perror("cd");
-    }
-  } else {
-    pid_t pid;
-    int status;
-
-    pid = fork();
-    if (pid < 0) {
-      perror("fork");
-      return 0;
-    }
-
-    if (pid == 0) {
-      if (execvp(args[0], args) == -1) {
-        perror("child process");
-        exit(EXIT_FAILURE);
-      }
-    } else {
-      waitpid(pid, &status, 0);
-    }
-  }
-  return 0;
-}
-
-/*
  * @brief Function writes current directory into buffer
  * */
 static char *get_cwd(char *buf, size_t bufsize) {
@@ -59,28 +16,6 @@ static char *get_cwd(char *buf, size_t bufsize) {
     return NULL;
   }
   return buf;
-}
-
-/*
- * @brief Parsing arguments from line
- *
- * @note Free the array before freeing the line
- * */
-char **parse_args(char *line) {
-  char **tokens = malloc(MAX_ARGS * sizeof(*tokens));
-  unsigned int position = 0;
-
-  char *token = strtok(line, DELIMITER);
-
-  while (token != NULL) {
-    tokens[position++] = token;
-    token =
-        strtok(NULL, DELIMITER); // NULL because we work with the same string
-  }
-
-  tokens[position] = NULL; // terminating execvp
-
-  return tokens;
 }
 
 /*
@@ -116,12 +51,11 @@ char *shell_input(void) {
 
 int main(void) {
   char *line;
-  char **args;
-  int status = 0;
+  Command *pipeline;
+  int result = 0;
 
   while (1) {
     line = shell_input();
-
     if (line == NULL) {
       printf("\n");
       break;
@@ -130,19 +64,21 @@ int main(void) {
       free(line);
       continue;
     }
+    pipeline = parse_pipeline(line);
 
-    args = parse_args(line);
+    if (pipeline == NULL) {
+      free(line);
+      continue;
+    }
 
-    status = execute_command(args);
+    result = execute_pipeline(pipeline);
 
-    free(args);
+    free_pipeline(pipeline);
     free(line);
 
-    if (status == 1) {
+    if (result == SHELL_EXIT)
       break;
-    }
   }
-  // First args, then line because args is array of pointers to line
 
   return 0;
 }

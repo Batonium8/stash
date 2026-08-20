@@ -11,7 +11,7 @@
  *
  * */
 
-char **tokenize(char *line, int *num_tokens) {
+static char **tokenize(char *line, int *num_tokens) {
   char **tokens = malloc(MAX_ARGS * sizeof(*tokens));
   if (tokens == NULL) {
     perror("malloc");
@@ -48,7 +48,7 @@ char **tokenize(char *line, int *num_tokens) {
  * @note Because of using strdup Command structure now owns
  *  strings and calling function need to free memory
  */
-Command *parse_tokens(char **tokens, int num_tokens) {
+static Command *parse_tokens(char **tokens, int num_tokens) {
   if (tokens == NULL) {
     return NULL;
   }
@@ -209,96 +209,141 @@ Command *parse_pipeline(char *line) {
 
 static int execute_builtin(Command *head) {
   if (head == NULL || head->argv[0] == NULL) {
-    return 0;
+    return BUILTIN_NOT_FOUND;
   }
 
   if (strcmp(head->argv[0], "cd") == 0) {
     if (head->argv[2] != NULL) {
       fprintf(stderr, "cd: too many arguments\n");
-      return 0;
+      return 1;
     }
     const char *dir = (head->argv[1] == NULL) ? getenv("HOME") : head->argv[1];
 
     if (dir == NULL) {
       fprintf(stderr, "HOME directory not set\n");
-      return 0;
+      return 1;
     }
 
     if (chdir(dir) != 0) {
       perror("cd");
-      return 0;
+      return 1;
     }
+    return 0;
   } else if (strcmp(head->argv[0], "exit") == 0) {
-    return -2; // exit code
+    return SHELL_EXIT;
   }
 
-  return -1; // not builtin command
+  return BUILTIN_NOT_FOUND;
 }
 
-int execute_command(Command *head) {
+// @note - called only inside execute_pipeline()
+static void execute_command(Command *head) {
   if (head == NULL || head->argv[0] == NULL) {
-    return 0;
+    exit(EXIT_FAILURE);
   }
 
-  int exit_code = execute_builtin(head);
-  // @note dont forget that -2 should end main loop
-  if (exit_code != -1) {
-    return exit_code;
+  int exit_status = execute_builtin(head);
+  if (exit_status != BUILTIN_NOT_FOUND) {
+    exit(exit_status == SHELL_EXIT ? 0 : exit_status);
   }
 
-  pid_t pid;
-  int status;
-
-  pid = fork();
-
-  if (pid < 0) {
-    perror("fork");
-    return 0;
-  }
-
-  if (pid == 0) {
-
-    if (head->infile != NULL) {
-      int file = open(head->infile, O_RDONLY);
-      if (file == -1) {
-        perror(head->infile);
-        exit(EXIT_FAILURE);
-      }
-      dup2(file, STDIN_FILENO);
-      close(file);
-    }
-
-    if (head->outfile != NULL) {
-      int flags = O_WRONLY | O_CREAT;
-      if (head->append) {
-        flags |= O_APPEND;
-      } else {
-        flags |= O_TRUNC;
-      }
-      int file =
-          open(head->outfile, flags, 0644); // 0644 - default file permissions
-      if (file == -1) {
-        perror(head->outfile);
-        exit(EXIT_FAILURE);
-      }
-      dup2(file, STDOUT_FILENO);
-      close(file);
-    }
-
-    if (execvp(head->argv[0], head->argv) == -1) {
-      perror("child process");
+  if (head->infile != NULL) {
+    int file = open(head->infile, O_RDONLY);
+    if (file == -1) {
+      perror(head->infile);
       exit(EXIT_FAILURE);
     }
-  } else {
-    waitpid(pid, &status, 0);
-    if (WIFEXITED(status)) {
-      return WEXITSTATUS(status);
-    }
+    dup2(file, STDIN_FILENO);
+    close(file);
   }
-  return 0;
+
+  if (head->outfile != NULL) {
+    int flags = O_WRONLY | O_CREAT;
+    if (head->append) {
+      flags |= O_APPEND;
+    } else {
+      flags |= O_TRUNC;
+    }
+    int file =
+        open(head->outfile, flags, 0644); // 0644 - default file permissions
+    if (file == -1) {
+      perror(head->outfile);
+      exit(EXIT_FAILURE);
+    }
+    dup2(file, STDOUT_FILENO);
+    close(file);
+  }
+
+  execvp(head->argv[0], head->argv);
+  perror("child process");
+  exit(EXIT_FAILURE);
 }
 
-int execute_pipeline(Command *head) { return 0; }
+int execute_pipeline(Command *head) {
+  if (head == NULL) {
+    return 0;
+  }
+  if (head->next == NULL) {
+    int builtin_exit_code = execute_builtin(head);
+    if (builtin_exit_code != BUILTIN_NOT_FOUND) {
+      return builtin_exit_code;
+    }
+  }
+  Command *curr = head;
+  pid_t pid, last_pid = 0;
+
+  // Previous pipe read end
+  int fd_in = 0;
+  while (curr != NULL) {
+    int fd[2];
+
+    if (curr->next != NULL) {
+      if (pipe(fd) == -1) {
+        perror("pipe");
+        return 1;
+      }
+    }
+
+    pid = fork();
+
+    if (pid < 0) {
+      perror("fork");
+      return 1;
+    }
+    if (pid == 0) {
+      if (fd_in != 0) {
+        dup2(fd_in, STDIN_FILENO);
+        close(fd_in);
+      }
+      if (curr->next != NULL) {
+        dup2(fd[1], STDOUT_FILENO);
+        close(fd[0]);
+        close(fd[1]);
+      }
+      execute_command(curr);
+    } else {
+      if (fd_in != 0) {
+        close(fd_in);
+      }
+      if (curr->next != NULL) {
+        close(fd[1]);
+        fd_in = fd[0];
+      }
+      last_pid = pid;
+    }
+    curr = curr->next;
+  }
+
+  pid_t wpid;
+  int status, last_exit_code = 0;
+  while ((wpid = wait(&status)) > 0) {
+    if (wpid == last_pid && WIFEXITED(status)) {
+      last_exit_code = WEXITSTATUS(status);
+    }
+  }
+
+  return last_exit_code;
+}
 
 void free_pipeline(Command *head) {
   while (head != NULL) {
