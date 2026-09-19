@@ -23,7 +23,7 @@
 1. Склонируйте репозиторий:
 
 ```bash
-git clone [https://github.com/batonium8/stash.git](https://github.com/batonium8/stash.git)
+git clone https://github.com/batonium8/stash.git
 cd stash
 ```
 
